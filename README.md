@@ -1,4 +1,4 @@
-# SkyBlock for Minetest
+# SkyBlock
 
 **SkyBlock** is a Minetest game where you begin on a small floating island with almost nothing. The goal is to survive, explore, and build using only the resources you create over time. Your creativity is the limit.
 
