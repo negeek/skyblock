@@ -1,0 +1,100 @@
+- name: Deploy  SkyBlock
+  hosts: all
+  become: yes
+  vars:
+    luanti_image: lscr.io/linuxserver/luanti:latest
+    luanti_container_name: skyblock
+    luanti_data_dir: /opt/luanti/skyblock/data
+    game_url: https://content.luanti.org/packages/zanderdev/skyblock_zero/download/
+    puid: "1000"
+    pgid: "1000"
+    port: "30000"
+    timezone: Etc/UTC
+    gameid: skyblock_zero
+
+  tasks:
+    - name: Install required system packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - unzip
+        state: present
+        update_cache: yes
+
+    - name: Add Docker’s official GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+        state: present
+
+    - name: Install Docker Engine
+      apt:
+        name: 
+          - docker-ce
+          - docker-compose
+        update_cache: yes
+        state: latest
+
+    - name: Ensure Docker service is started
+      systemd:
+        name: docker
+        state: started
+
+    - name: Check if game dir already exists
+      stat:
+        path: "{{ luanti_data_dir }}/games"
+      register: luanti_games_dir_stat
+
+    - name: Create Luanti data directory
+      when: not luanti_games_dir_stat.stat.exists
+      file:
+        path: "{{ luanti_data_dir }}/games"
+        state: directory
+        owner: "{{ puid }}"
+        group: "{{ pgid }}"
+        mode: '0755'
+
+    - name: Download game zip
+      get_url:
+        url: "{{ game_url }}"
+        dest: /tmp/game.zip
+
+    - name: Check if game already exists
+      stat:
+        path: "{{ luanti_data_dir }}/games/{{ gameid }}"
+      register: game_dir
+
+    - name: Unzip game into games directory
+      when: not game_dir.stat.exists
+      unarchive:
+        src: /tmp/game.zip
+        dest: "{{ luanti_data_dir }}/games/"
+        remote_src: yes
+
+    - name: Remove game zip after extraction
+      file:
+        path: /tmp/game.zip
+        state: absent
+
+    - name: Run Luanti Docker container
+      docker_container:
+        name: "{{ luanti_container_name }}"
+        image: "{{ luanti_image }}"
+        restart_policy: unless-stopped
+        ports:
+          - "{{ port }}:30000/udp"
+        env:
+          PUID: "{{ puid }}"
+          PGID: "{{ pgid }}"
+          TZ: "{{ timezone }}"
+          CLI_ARGS: "--gameid {{ gameid }}"
+        volumes:
+          - "{{ luanti_data_dir }}:/config/.minetest"
